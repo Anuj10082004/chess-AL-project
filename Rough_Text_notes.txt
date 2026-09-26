@@ -1,0 +1,162 @@
+What is this project:
+
+
+Importsnt note : please make sure you have played atleast nealry 1000 games for this to worl
+
+How to  run this project:
+ok first started the uv 
+no need for requirements as uv will take care of that in .toml
+made teh config file
+important note: first get the id of the person and change the username in the config file otherwise it and upadte the config file rating, base model to near there rating of the user  
+Paper : https://arxiv.org/pdf/2006.01855 ok so there are more complex and better pappers like maia2 and other you can look at github repo of them .
+
+yoou can download the model according to your need from here :https://github.com/CSSLab/maia-chess/releases
+it contain all model just put it in models folder.
+
+Note : make a .env file get the api key (its free)   from lichess and past it into .env file otherwise the bot will not work nd while makin token rember to click play from external as tick in lichess .
+ if you want to play offline on your pc you can use gui_play.py after following the down steps
+
+and yay to run it proceed in this step:
+make the config file change.
+run fetch_games.py
+run analyse_games.py #optional only tell analyis 
+run load_maia_weigths.py this help o download the maia weights 
+then run prepare_training.py  
+then train.py
+
+
+
+
+the fetch games fetch teh games , how it is done is it fetch the archive of the user and then it merges the archive in single file .
+we hit the url api of chess.com and get the arcchived month list then we hit that month list url again to get the games in pgn format and merge them in single file .
+the archive link looks like this :  https://api.chess.com/pub/player/{USERNAME}/games/archives/{YEAR}/{MONTH}
+
+analyse game does the following things: 
+1.top starting moves
+2.avg moves
+3.wins
+4.avg rating
+5.avg moves
+
+load_maia_weigths: solves the issue that maia is in c++ not in yorch so converthe weights 
+
+prepare_training : parses raw PGN chess games, filters out anomalies, and encodes the board states into 112-plane spatial tensors to match the Leela Chess Zero architecture. It then one-hot encodes the human player's moves into an 1858-class policy vector, saving the resulting supervised learning pairs into compressed NumPy chunks
+
+train.py: This script loads the prepared data and initializes the Leela Chess Zero architecture with Maia base weights. It fine-tunes the neural network using PyTorch on the GPU, stopping automatically when the validation accuracy peaks to prevent over-fitting.
+
+lichess_bot.py: A background service script that uses the berserk library to connect the trained PyTorch model directly to the Lichess API. It listens for incoming challenges in real-time, accepts standard games, and uses the neural network to calculate and play moves automatically online.
+
+
+.\.venv\Scripts\python.exe lichess_bot.py for running localay it is becuase when deloy i downgraded the version so to solve that error.
+
+
+The math part from the maia paper:
+
+Part 1: The Math Sizes (Following the Data)
+Imagine we are feeding a batch of 64 chess positions into the network at the exact same time. Here is the exact size of the data at every single step of the MaiaNet architecture:
+
+1. The Input (What goes in)
+
+Size: [64, 112, 8, 8]
+reaminder to me here in 112 
+Layers 0 to 5: Where your Pawns, Knights, Bishops, Rooks, Queens, and King are.
+
+Layers 6 to 11: Where your opponent's pieces are.
+
+Layer 12: The exact square where an en passant capture is currently legal.
+
+Layers 13 to 103: Empty!
+What it represents: 64 games happening at once. 112 layers of visual information (where the pawns are, whose turn it is, etc.). 8x8 is the literal chess board.
+
+2. The Input Convolution (The First Impression)
+
+Size: [64, 64, 8, 8]
+
+What it represents: The network compresses those 112 layers down into 64 "thinking channels." The board size stays 8x8.
+
+3. The 6 Residual Blocks (The Deep Thinking)
+
+Size: [64, 64, 8, 8]
+
+What it represents: The size never changes here. The data just passes through this 64-channel block 6 times in a row. This is the "backbone" where the AI calculates its deep chess understanding (patterns, tactics, safety).
+
+4. The Split (Two Heads)
+After thinking, the data splits into two different paths to answer two different questions:
+
+Path A: The Policy Head (Guessing the Move)
+
+Step 1: [64, 80, 8, 8] — It expands to 80 layers (representing 80 different types of moves, like moving up 1 square, moving like a knight, etc.).
+
+Step 2: [64, 5120] — It flattens the 3D board into a flat list of numbers (80 * 8 * 8 = 5120 possible trajectories).
+
+Step 3: [64, 1858] — It uses the gather_indices trick to throw away mathematically impossible moves (like a knight jumping off the edge of the board). It outputs probabilities for the 1,858 strictly legal chess moves.
+
+Path B: The Value Head (Guessing the Winner)
+
+Step 1: [64, 32, 8, 8] — It shrinks the data down to 32 channels.
+
+Step 2: [64, 2048] — It flattens the board.
+
+Step 3: [64, 1] — It uses standard math to crush those 2048 numbers down into a single number. (e.g., +0.9 means White is crushing, -0.8 means Black is crushing).
+
+
+Some notes of me on fine tuning:
+Fine-tuning is a specific type of transfer learning .
+Freezing (requires_grad = False)
+have small learning rate
+
+This is the script:
+Whenever you start a new AI project, follow this exact checklist:
+
+Gather your raw data and clean out the junk.
+
+Write a script to convert the raw data into numerical Tensors.
+
+Download the pre-trained weights of an existing model.
+
+Recreate the exact Python architecture of that model.
+
+Load the weights into your architecture.
+
+Freeze the backbone; unfreeze the final output heads.
+
+Set a tiny learning rate.
+
+Run the training loop while actively watching the Validation Loss.
+
+Stop training the exact moment Validation Loss stops going down.
+
+
+56000 parameters:
+The General Engineering Formulas:
+Convolutional Layer (Conv2d):$$\text{Parameters} = (\text{In Channels} \times \text{Out Channels} \times \text{Kernel Size}^2) + \text{Biases (if bias=True)}
+$$Batch Normalization (BatchNorm2d):$$\text{Parameters} = 2 \times \text{Channels} \quad (\text{Learnable parameters: scale } \gamma \text{ and shift } \beta)
+$$Linear Layer (Linear):$$\text{Parameters} = (\text{Input Nodes} \times \text{Output Nodes}) + \text{Biases (if bias=True)}$$
+
+
+some interview que could be asked:
+Q1: Why use a scalar weight of 0.01 for the value loss instead of weighting them equally?
+Answer: "We apply a $0.01$ coefficient multiplier to scale down the value gradient updates because the two tasks operate on fundamentally different loss scales and optimization dynamics. 
+Policy prediction is treated as a high-dimensional classification problem over a sequence of discrete choices, where cross-entropy loss values naturally start quite high.
+Value prediction is an MSE regression constrained tightly between $-1.0$ and $+1.0$. 
+If we weighted them equally ($1:1$), the aggressive gradients computed by the value head would overrule the shared residual layers, causing the model to prioritize state evaluation while causing the move policy capabilities to degrade. 
+The $0.01$ constant balances their influence so the value head acts strictly as a regularization layer.
+
+"Q2: Walk me through the mathematical transformation from the raw output of policy_conv to the final shape of [Batch, POLICY_SIZE].
+Answer: "The execution pipeline proceeds through three distinct structural transformations:
+The input tensor emerges from the policy_conv block maintaining spatial mapping at a shape of [Batch, 80, 8, 8].
+We apply a spatial flattening layer via .view(p.size(0), -1).
+ This collapses the channel and spatial dimensions into a single flat feature axis, transforming the tensor to a dimension matrix of [Batch, 5120].
+ To map this down to physically valid legal moves, we run tensor slicing via advanced indexing: p[:, self.gather_indices]. 
+ gather_indices is a pre-calculated index look-up matrix mapping the valid coordinates.
+  This operation reduces the second dimension from the absolute spatial combination pool of 5,120 down to the specific legal move vector structure of [Batch, POLICY_SIZE].
+  
+  
+"Q3: If training loss is dropping to near-zero, but validation loss plateaus and spikes upward, what architectural or hyperparameter changes would you deploy?
+Answer: "This behavior indicates severe model overfitting where the model is memorizing the specific training dataset distribution instead of learning generalizable features. 
+To fix this, I would implement three primary adjustments:
+Regularization: Increase the label_smoothing parameter in F.cross_entropy from $0.1$ to $0.15$ or $0.2$ to restrict the optimization engine from becoming overconfident on noisy targets, and add dropout layers inside the unfrozen linear mapping heads.
+
+Weight Decay: Increase the $L_2$ regularization component inside the Adam optimizer (raising weight_decay from 1e-4 to 1e-3) to structurally penalize large weight magnitudes.
+
+Optimization Interruption: Rely directly on an automated Early Stopping class monitoring the validation loop. The moment the moving average validation loss plateaus for more than a set patience threshold, execution terminates and resets the network weights back to the checkpoint file tracking the lowest validation error point."
